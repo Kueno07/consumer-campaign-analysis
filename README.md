@@ -28,4 +28,22 @@ The experiment output is descriptive. A causal interpretation also depends on va
 
 ## Use
 
-Review and adapt the reference schemas in `analysis.sql` to an authorized dataset. Run each SQL statement in PostgreSQL after checking its grain, date boundaries, currency, and assignment rules. No sample data or computed business findings ship with this repository.
+Review and adapt the reference schemas in `analysis.sql` to an authorized dataset. Run each SQL statement in PostgreSQL after checking its grain, date boundaries, currency, and assignment rules. No case data or computed findings from the original process ship with this repository.
+
+## Entrega original (resumo sanitizado)
+
+A submissão da época reuniu um roteiro de consultas e uma apresentação. Este repositório é uma reconstrução técnica com dados sintéticos; não reproduz perguntas, dados ou resultados do processo seletivo.
+
+## Exemplo sintético
+
+`examples/setup.sql` cria tabelas temporárias e valores demonstrativos. Na mesma sessão PostgreSQL, execute o setup e as consultas de `analysis.sql`.
+
+| Indicador demonstrativo | Resultado esperado |
+|---|---:|
+| Média por cliente controle | USD sintético 100 |
+| Média por cliente tratamento | USD sintético 150 |
+| Lift relativo | 50% |
+| Variação 2024 vs. 2023 | USD sintético 200 (20%) |
+| Variação 2026 vs. ano anterior | `NULL` (2025 ausente) |
+
+Os valores são sintéticos e não representam o case original.
