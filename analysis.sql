@@ -1,67 +1,74 @@
--- Reference schema: campaign_assignment(customer_id, variant, assignment_group, segment_id)
---                 customer_sales(customer_id, net_sales)
--- PostgreSQL syntax. assignment_group is 'control' or 'treatment'.
+-- PostgreSQL reference query.
+-- Grain: one campaign_assignment row per experiment/customer.
+-- assignment_group is 'control' or 'treatment'. Outcome windows are half-open.
+-- Assumption: campaigns do not overlap for the same customer during an outcome window.
 
 WITH customer_outcomes AS (
     SELECT
+        a.experiment_id,
         a.customer_id,
-        a.variant,
         a.assignment_group,
         a.segment_id,
-        COALESCE(SUM(s.net_sales), 0) AS net_sales
+        COALESCE(SUM(s.net_sales), 0)::numeric AS net_sales
     FROM campaign_assignment AS a
     LEFT JOIN customer_sales AS s
         ON s.customer_id = a.customer_id
-    GROUP BY a.customer_id, a.variant, a.assignment_group, a.segment_id
+       AND s.sale_at >= a.outcome_start
+       AND s.sale_at < a.outcome_end
+    GROUP BY
+        a.experiment_id,
+        a.customer_id,
+        a.assignment_group,
+        a.segment_id
 ),
 segment_results AS (
     SELECT
-        variant,
+        experiment_id,
         segment_id,
         COUNT(*) FILTER (WHERE assignment_group = 'control') AS control_customers,
         COUNT(*) FILTER (WHERE assignment_group = 'treatment') AS treatment_customers,
         AVG(net_sales) FILTER (WHERE assignment_group = 'control') AS control_avg_sales,
         AVG(net_sales) FILTER (WHERE assignment_group = 'treatment') AS treatment_avg_sales
     FROM customer_outcomes
-    GROUP BY variant, segment_id
+    GROUP BY experiment_id, segment_id
 )
 SELECT
-    variant,
+    experiment_id,
     segment_id,
     control_customers,
     treatment_customers,
     control_avg_sales,
     treatment_avg_sales,
     treatment_avg_sales - control_avg_sales AS absolute_lift,
-    (treatment_avg_sales / NULLIF(control_avg_sales, 0)) - 1 AS relative_lift
+    CASE
+        WHEN control_avg_sales > 0
+        THEN (treatment_avg_sales / control_avg_sales) - 1
+    END AS relative_lift
 FROM segment_results
-ORDER BY variant, segment_id;
+ORDER BY experiment_id, segment_id;
 
--- Reference schema: department_sales(department_id, department_name, year, sales, customers)
--- Compare complete years. NULLIF avoids dividing by a zero prior-year value.
-WITH annual AS (
+-- Reference schema: department_year(department_id, department_name, year,
+--                                   net_sales, customers)
+-- Grain: one row per department/calendar year; customers is annual unique customers.
+WITH changes AS (
     SELECT
-        department_id,
-        department_name,
-        year,
-        SUM(sales) AS sales,
-        SUM(customers) AS customers
-    FROM department_sales
-    GROUP BY department_id, department_name, year
-), changes AS (
-    SELECT
-        *,
-        LAG(sales) OVER (PARTITION BY department_id ORDER BY year) AS prior_year_sales
-    FROM annual
+        d.*,
+        LAG(year) OVER department_years AS prior_year,
+        LAG(net_sales) OVER department_years AS prior_year_sales
+    FROM department_year AS d
+    WINDOW department_years AS (PARTITION BY department_id ORDER BY year)
 )
 SELECT
     department_id,
     department_name,
     year,
-    sales,
+    net_sales,
     customers,
-    sales / NULLIF(customers, 0) AS average_sales_per_customer,
-    sales - prior_year_sales AS sales_change,
-    (sales / NULLIF(prior_year_sales, 0)) - 1 AS sales_change_rate
+    CASE WHEN customers > 0 THEN net_sales / customers END AS sales_per_customer,
+    CASE WHEN prior_year = year - 1 THEN net_sales - prior_year_sales END AS yoy_sales_change,
+    CASE
+        WHEN prior_year = year - 1 AND prior_year_sales > 0
+        THEN (net_sales / prior_year_sales) - 1
+    END AS yoy_sales_change_rate
 FROM changes
 ORDER BY department_name, year;
