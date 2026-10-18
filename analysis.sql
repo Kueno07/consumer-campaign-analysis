@@ -64,11 +64,11 @@ SELECT
     year,
     net_sales,
     customers,
-    CASE WHEN customers > 0 THEN net_sales / customers END AS sales_per_customer,
+    CASE WHEN customers > 0 THEN net_sales::numeric / customers END AS sales_per_customer,
     CASE WHEN prior_year = year - 1 THEN net_sales - prior_year_sales END AS yoy_sales_change,
     CASE
         WHEN prior_year = year - 1 AND prior_year_sales > 0
-        THEN (net_sales / prior_year_sales) - 1
+        THEN (net_sales::numeric / prior_year_sales) - 1
     END AS yoy_sales_change_rate
 FROM changes
 ORDER BY department_name, year;
